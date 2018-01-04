@@ -14,17 +14,11 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-data "aws_vpc" "vpc" {
+data "aws_subnet_ids" "private_subnets" {
+  vpc_id = "${aws_vpc.batch.id}"
   tags {
-    Name = "${var.vpc_name}"
+    type = "private"
   }
-}
-
-data "aws_subnet_ids" "my_vpc_subnets" {
-  vpc_id = "${data.aws_vpc.vpc.id}"
-  # tags {
-  #   type = "private"
-  # }
 }
 
 locals {
@@ -43,39 +37,36 @@ resource "aws_s3_bucket" "batch_processing_outgoing" {
 }
 
 
-# resource "aws_sns_topic" "batch_processing_incoming" {
-#   name = "batch_processing_incoming"
-# }
-
-resource "aws_security_group" "wide_open" {
+resource "aws_security_group" "allow_anything" {
   name        = "wide-open"
   description = "Allow anything"
+  vpc_id      = "${aws_vpc.batch.id}"
 
   ingress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"] // TBD: should tighten this down
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
     from_port       = 0
     to_port         = 0
     protocol        = "-1"
-    cidr_blocks = ["0.0.0.0/0"] // TBD: should tighten this down
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
 resource "aws_security_group" "redis" {
   name        = "redis"
   description = "Allow my VPC"
-  # vpc_id      = "${aws_vpc.main.id}"
+  vpc_id      = "${aws_vpc.batch.id}"
 
   ingress {
     from_port   = 6379
     to_port     = 6379
     protocol    = "tcp"
-    cidr_blocks = ["172.31.0.0/16"]
+    cidr_blocks = ["${aws_vpc.batch.cidr_block}"]
   }
 
   egress {
@@ -86,6 +77,11 @@ resource "aws_security_group" "redis" {
   }
 }
 
+resource "aws_elasticache_subnet_group" "private_subnets" {
+  name       = "private-subnets-for-redis"
+  subnet_ids = ["${data.aws_subnet_ids.private_subnets.ids}"]
+}
+
 resource "aws_elasticache_cluster" "redis" {
   cluster_id           = "batch-processing"
   engine               = "redis"
@@ -94,18 +90,15 @@ resource "aws_elasticache_cluster" "redis" {
   num_cache_nodes      = 1
   parameter_group_name = "default.redis3.2"
   apply_immediately    = true
+  subnet_group_name    = "${aws_elasticache_subnet_group.private_subnets.name}"
   security_group_ids   = ["${aws_security_group.redis.id}"]
 }
 
 
 resource "aws_sqs_queue" "batch_processing_queue" {
   name                      = "batch-processing-queue"
-  # delay_seconds             = 90
-  # max_message_size          = 2048
-  # message_retention_seconds = 86400
   receive_wait_time_seconds = 20
   visibility_timeout_seconds = 60
-  # redrive_policy            = "{\"deadLetterTargetArn\":\"${aws_sqs_queue.terraform_queue_deadletter.arn}\",\"maxReceiveCount\":4}"
 }
 
 
@@ -186,9 +179,8 @@ resource "aws_lambda_function" "batch_processing_post" {
   timeout          = 60
   publish          = true
   vpc_config       = {
-    # subnet_ids = ["${data.aws_subnet_ids.my_vpc_subnets.ids}"]
-    subnet_ids = ["subnet-e6e4e880"] // FIXME: hard-coded subnet for lambda with NAT gateway
-    security_group_ids = ["${aws_security_group.wide_open.id}"]
+    subnet_ids = ["${data.aws_subnet_ids.private_subnets.ids}"]
+    security_group_ids = ["${aws_security_group.allow_anything.id}"]
   }
   environment {
     variables = {
@@ -295,9 +287,8 @@ resource "aws_lambda_function" "queue_feeder" {
   timeout          = 60
   publish          = true
   vpc_config       = {
-    # subnet_ids = ["${data.aws_subnet_ids.my_vpc_subnets.ids}"]
-    subnet_ids = ["subnet-e6e4e880"] // FIXME: hard-coded subnet for lambda with NAT gateway
-    security_group_ids = ["${aws_security_group.wide_open.id}"]
+    subnet_ids = ["${data.aws_subnet_ids.private_subnets.ids}"]
+    security_group_ids = ["${aws_security_group.allow_anything.id}"]
   }
   environment {
     variables = {
@@ -311,6 +302,3 @@ resource "aws_lambda_function" "queue_feeder" {
     }
   }
 }
-
-
-
