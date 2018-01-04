@@ -37,6 +37,11 @@ resource "aws_s3_bucket" "batch_processing_incoming" {
   acl    = "private"
 }
 
+resource "aws_s3_bucket" "batch_processing_outgoing" {
+  bucket = "${local.account_id}-batch-processing-outgoing-${var.aws_region}"
+  acl    = "private"
+}
+
 
 # resource "aws_sns_topic" "batch_processing_incoming" {
 #   name = "batch_processing_incoming"
@@ -133,9 +138,6 @@ resource "aws_iam_role_policy" "batch_processing_post_role_policy1" {
        {
            "Effect": "Allow",
            "Action": [
-              "sns:Publish",
-              "s3:PutObject",
-              "s3:GetBucketLocation",
               "logs:CreateLogGroup",
               "logs:CreateLogStream",
               "logs:PutLogEvents"
@@ -143,6 +145,13 @@ resource "aws_iam_role_policy" "batch_processing_post_role_policy1" {
            "Resource": [
                "*"
            ]
+       },
+       {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject"
+          ],
+          "Resource": "${aws_s3_bucket.batch_processing_incoming.arn}/*"
        },
        {
           "Effect": "Allow",
@@ -187,6 +196,7 @@ resource "aws_lambda_function" "batch_processing_post" {
       SQS_QUEUE_URL = "${aws_sqs_queue.batch_processing_queue.id}"
       REDIS_HOST = "${aws_elasticache_cluster.redis.cache_nodes.0.address}"
       REDIS_PORT = "${aws_elasticache_cluster.redis.port}"
+      S3_INCOMING_BUCKET = "${aws_s3_bucket.batch_processing_incoming.id}"
     }
   }
 }
@@ -221,9 +231,6 @@ resource "aws_iam_role_policy" "batch_processing_feeder_role_policy1" {
        {
            "Effect": "Allow",
            "Action": [
-              "sns:Publish",
-              "s3:GetObject",
-              "s3:GetBucketLocation",
               "logs:CreateLogGroup",
               "logs:CreateLogStream",
               "logs:PutLogEvents"
@@ -231,6 +238,21 @@ resource "aws_iam_role_policy" "batch_processing_feeder_role_policy1" {
            "Resource": [
                "*"
            ]
+       },
+       {
+          "Effect": "Allow",
+          "Action": [
+            "s3:GetObject",
+            "s3:DeleteObject"
+          ],
+          "Resource": "${aws_s3_bucket.batch_processing_incoming.arn}/*"
+       },
+       {
+          "Effect": "Allow",
+          "Action": [
+            "s3:PutObject"
+          ],
+          "Resource": "${aws_s3_bucket.batch_processing_outgoing.arn}/*"
        },
        {
           "Effect": "Allow",
@@ -284,6 +306,8 @@ resource "aws_lambda_function" "queue_feeder" {
       REDIS_HOST = "${aws_elasticache_cluster.redis.cache_nodes.0.address}"
       REDIS_PORT = "${aws_elasticache_cluster.redis.port}"
       MY_FUNCTION_NAME = "queue-feeder"
+      S3_INCOMING_BUCKET = "${aws_s3_bucket.batch_processing_incoming.id}"
+      S3_OUTGOING_BUCKET = "${aws_s3_bucket.batch_processing_outgoing.id}"
     }
   }
 }
