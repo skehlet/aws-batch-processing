@@ -1,4 +1,4 @@
-# Serverless batch processing
+# Serverless batch processing experiment
 
 For this experiment I wanted a solution for scalable batch processing using all AWS managed components.
 
@@ -15,5 +15,10 @@ I feel like this would be unappealing to some, but in my case, my workers are go
 Next, regarding SQS: currently Lambda functions can't natively feed off or be triggered by SQS, but I stumbled across [a clever way from theburningmonk.com guy]((http://theburningmonk.com/2016/04/aws-lambda-use-recursive-function-to-process-sqs-messages-part-1/)) to spawn an infinite chain of lambda executions. He calls it recursive lambda, but I think of it as perpetual self-reexecution, because they don't stack up--just before exiting, you asynchronously launch a new instance of yourself. Each execution feeds off SQS using long-polling, up to the max wait time of 20 seconds. He has some math on the costs, and it's dirt cheap, even if you leave it running full time.
 
 The next hurdle would be scaling, and the same guy has an article on [scaling this solution automatically](https://medium.com/theburningmonk-com/aws-lambda-use-recursive-function-to-process-sqs-messages-part-2-28b488993d8e). Really cool, I hope to try it out soon.
+
+Final notes:
+* You have to kick off the recursive lambda function (see `launch-feeder.bat`), after which it'll keep going. For this experiment I have it look on S3 for an object named `keep-feeding`, and it only recurses if it finds it.
+* All the Terraform is included. See `init.bat` to initialize the state on S3.
+* You'll need to cd into each of the lamda function directories (`batch-processing-post` and `queue-feeder`) and run `npm install` before running the usual `terraform plan` and `terraform apply`.
 
 ![Batch processing using lambda](Batch%20processing%20using%20lambda.png)
