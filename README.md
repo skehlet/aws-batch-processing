@@ -14,4 +14,4 @@ Currently Lambda functions can't natively feed off or be triggered by SQS, but I
 
 The next hurdle would be scaling, and the same guy has an article on [scaling this solution automatically](https://medium.com/theburningmonk-com/aws-lambda-use-recursive-function-to-process-sqs-messages-part-2-28b488993d8e). Really cool, I hope to try it out soon.
 
-![](Batch processing using lambda.png)
+![Batch processing using lambda](Batch%20processing%20using%20lambda.png)
