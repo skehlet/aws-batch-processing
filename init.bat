@@ -1,4 +1,4 @@
-echo off
+@echo off
 
 set ACCOUNT_ID=519765885403
 set REGION=us-west-2

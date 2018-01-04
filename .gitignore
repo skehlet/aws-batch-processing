@@ -1,3 +1,4 @@
 .terraform
 .tmp
 plan
+node_modules

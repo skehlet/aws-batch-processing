@@ -1,0 +1,15 @@
+{
+  "name": "queue-feeder",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "bluebird": "^3.5.1",
+    "redis": "^2.8.0"
+  }
+}
