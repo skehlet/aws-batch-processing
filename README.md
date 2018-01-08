@@ -2,7 +2,7 @@
 
 For this experiment I wanted a solution for scalable batch processing using all AWS managed components.
 
-Additionally, I wanted the response to the HTTP requester to be blocked until the processing was finished, so the client could be sure the processing succeeded and not have to turn around and poll us to be sure. This is a requirement of the clients I'm working with.
+Additionally, I wanted the response to the HTTP requester to be blocked until the processing was finished, so the client could be sure the processing succeeded and not have to turn around and poll us to be sure. This is a requirement of the clients I'm working with. Unfortunately, one limitation of API Gateway I was not aware of when I started is that requests cannot take longer than 29 seconds, and this cannot be increased by AWS. This could be a showstopper.
 
 Once inside, I didn't want my lambda POST handler to have to poll S3 for the expected final product (although in hindsight that would be a much simpler solution), so I used Elasticache for Redis' [PUBLISH/SUBSCRIBE features](https://redis.io/topics/pubsub) to notify it that the backend lambda's work was done. This however required configuring the lambda functions to [be able to access resources in my VPC](https://docs.aws.amazon.com/lambda/latest/dg/vpc.html), which it can't normally do, and this comes with some special considerations:
 
