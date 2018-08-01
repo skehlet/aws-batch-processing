@@ -12,8 +12,6 @@
 });
 
 const AWS_REGION_NAME = process.env.AWS_REGION_NAME;
-// const SNS_INCOMING_TOPIC = process.env.SNS_INCOMING_TOPIC;
-// const SNS_PROCESSED_TOPIC = process.env.SNS_PROCESSED_TOPIC;
 const SQS_QUEUE_URL = process.env.SQS_QUEUE_URL;
 const REDIS_HOST = process.env.REDIS_HOST;
 const REDIS_PORT = process.env.REDIS_PORT;
@@ -26,7 +24,6 @@ const AWS = require('aws-sdk');
 AWS.config.update({
     region: AWS_REGION_NAME
 });
-// const SNS = new AWS.SNS({apiVersion: '2010-03-31'});
 const SQS = new AWS.SQS({apiVersion: '2012-11-05'});
 let s3 = new AWS.S3({
     signatureVersion: 'v4',

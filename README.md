@@ -10,15 +10,19 @@ Once inside, I didn't want my lambda POST handler to have to poll S3 for the exp
 * So you need enough free IPs, potentially up to a 1000 (the current lambda max simultaneous execution limit)
 * When run this way, Lambdas no longer have Internet access (which includes reaching any AWS managed service like SQS), so you'll need to put them in a private subnet with its default route set to a NAT Gateway to get out. (I did look into VPC endpoints, and that could work, e.g. for S3, but seems like SQS is not supported, so you still need a NAT gateway).
 
-I feel like this would be unappealing to some, but in my case, my workers are going to want to access stuff inside my VPC like RDS, Redis, and Elasticsearch, so this would be necessary anyway.
+My workers are going to want to access stuff inside my VPC like RDS, Redis, and Elasticsearch, so this would be necessary anyway.
 
-Next, regarding SQS: currently Lambda functions can't natively feed off or be triggered by SQS, but I stumbled across [a clever way from theburningmonk.com](http://theburningmonk.com/2016/04/aws-lambda-use-recursive-function-to-process-sqs-messages-part-1/) to spawn an infinite chain of lambda executions. He calls it recursive lambda, but I think of it as perpetual self-reexecution, because they don't stack up--just before exiting, you asynchronously launch a new instance of yourself. Each execution feeds off SQS using long-polling, up to the max wait time of 20 seconds. He has some math on the costs, and it's dirt cheap, even if you leave it running full time.
-
-The next hurdle would be scaling, and [theburningmonk.com also has an article on scaling this automatically](https://medium.com/theburningmonk-com/aws-lambda-use-recursive-function-to-process-sqs-messages-part-2-28b488993d8e). Really cool, I hope to try it out soon.
+*Update 2018-07-31*: Recently Lambda began [supporting SQS as an event source](https://aws.amazon.com/blogs/aws/aws-lambda-adds-amazon-simple-queue-service-to-supported-event-sources/), so this simplifies the lambda worker greatly! Previously I was using the recursive lambda technique from [theburningmonk.com](http://theburningmonk.com/2016/04/aws-lambda-use-recursive-function-to-process-sqs-messages-part-1/) to spawn an infinite chain of lambda executions.
 
 Final notes:
-* You have to kick off the recursive lambda function (see `launch-feeder.bat`), after which it'll keep going. For this experiment I have it look on S3 for an object named `keep-feeding`, and it only recurses if it finds it.
-* All the Terraform is included. See `init.bat` to initialize the state on S3.
-* You'll need to cd into each of the lamda function directories (`batch-processing-post` and `queue-feeder`) and run `npm install` before running the usual `terraform plan` and `terraform apply`.
+* All the Terraform is included. Run `init.sh` (or `init.bat`) to initialize the state (stored on S3).
+* cd into each of the lamda function directories (`batch-processing-post` and `queue-worker`) and run `npm install`.
+* Run `terraform plan` and `terraform apply`.
+* At the end of the `terraform apply` run, it will output your API Gateway URL
+* POST to that URL like:
+```
+curl -vv https://abcds2v65i.execute-api.us-west-2.amazonaws.com/dev -d '{"message":"hi"}'
+```
+* I never actually implemented Step 6, writing something to S3.
 
 ![Batch processing using lambda](Batch%20processing%20using%20lambda.png)

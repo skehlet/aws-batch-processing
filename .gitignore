@@ -1,4 +1,6 @@
+.idea
 .terraform
 .tmp
 plan
 node_modules
+custom.auto.tfvars

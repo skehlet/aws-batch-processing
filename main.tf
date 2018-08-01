@@ -9,17 +9,10 @@ terraform {
 
 provider "aws" {
   region  = "us-west-2"
-  version = "~> 1.0"
+  version = "~> 1.26"
 }
 
 data "aws_caller_identity" "current" {}
-
-data "aws_subnet_ids" "private_subnets" {
-  vpc_id = "${aws_vpc.batch.id}"
-  tags {
-    type = "private"
-  }
-}
 
 locals {
   account_id = "${data.aws_caller_identity.current.account_id}"
@@ -79,7 +72,7 @@ resource "aws_security_group" "redis" {
 
 resource "aws_elasticache_subnet_group" "private_subnets" {
   name       = "private-subnets-for-redis"
-  subnet_ids = ["${data.aws_subnet_ids.private_subnets.ids}"]
+  subnet_ids = ["${aws_subnet.private1.id}"]
 }
 
 resource "aws_elasticache_cluster" "redis" {
@@ -88,7 +81,7 @@ resource "aws_elasticache_cluster" "redis" {
   node_type            = "cache.t2.micro"
   port                 = 6379
   num_cache_nodes      = 1
-  parameter_group_name = "default.redis3.2"
+  parameter_group_name = "default.redis4.0"
   apply_immediately    = true
   subnet_group_name    = "${aws_elasticache_subnet_group.private_subnets.name}"
   security_group_ids   = ["${aws_security_group.redis.id}"]
@@ -175,11 +168,11 @@ resource "aws_lambda_function" "batch_processing_post" {
   function_name    = "batch-processing-post"
   role             = "${aws_iam_role.batch_processing_post_role.arn}"
   handler          = "index.handler"
-  runtime          = "nodejs6.10"
+  runtime          = "nodejs8.10"
   timeout          = 60
   publish          = true
   vpc_config       = {
-    subnet_ids = ["${data.aws_subnet_ids.private_subnets.ids}"]
+    subnet_ids = ["${aws_subnet.private1.id}"]
     security_group_ids = ["${aws_security_group.allow_anything.id}"]
   }
   environment {
@@ -194,8 +187,8 @@ resource "aws_lambda_function" "batch_processing_post" {
 }
 
 
-resource "aws_iam_role" "batch_processing_feeder_role" {
-  name = "batch-processing-feeder"
+resource "aws_iam_role" "batch_processing_worker_role" {
+  name = "batch-processing-worker"
   assume_role_policy = <<EOF
 {
   "Version": "2012-10-17",
@@ -213,9 +206,9 @@ resource "aws_iam_role" "batch_processing_feeder_role" {
 EOF
 }
 
-resource "aws_iam_role_policy" "batch_processing_feeder_role_policy1" {
-  name = "batch-processing-feeder-role-policy1"
-  role = "${aws_iam_role.batch_processing_feeder_role.id}"
+resource "aws_iam_role_policy" "batch_processing_worker_role_policy1" {
+  name = "batch-processing-worker-role-policy1"
+  role = "${aws_iam_role.batch_processing_worker_role.id}"
   policy = <<EOF
 {
    "Version": "2012-10-17",
@@ -250,7 +243,9 @@ resource "aws_iam_role_policy" "batch_processing_feeder_role_policy1" {
           "Effect": "Allow",
           "Action": [
             "sqs:ReceiveMessage",
-            "sqs:DeleteMessage"
+            "sqs:DeleteMessage",
+            "sqs:GetQueueAttributes",
+            "sqs:ChangeMessageVisibility"
           ],
           "Resource": "${aws_sqs_queue.batch_processing_queue.arn}"
        },
@@ -259,35 +254,35 @@ resource "aws_iam_role_policy" "batch_processing_feeder_role_policy1" {
           "Action": [
             "lambda:InvokeFunction"
           ],
-          "Resource": "arn:aws:lambda:us-west-2:${local.account_id}:function:queue-feeder"
+          "Resource": "arn:aws:lambda:us-west-2:${local.account_id}:function:queue-worker"
        }
    ]
 }
 EOF
 }
 
-resource "aws_iam_role_policy_attachment" "feeder_attachment" {
-  role = "${aws_iam_role.batch_processing_feeder_role.name}"
+resource "aws_iam_role_policy_attachment" "worker_attachment" {
+  role = "${aws_iam_role.batch_processing_worker_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-data "archive_file" "batch_processing_feeder_zip" {
+data "archive_file" "batch_processing_worker_zip" {
   type = "zip"
-  source_dir = "queue-feeder"
-  output_path = ".tmp/queue-feeder.zip"
+  source_dir = "queue-worker"
+  output_path = ".tmp/queue-worker.zip"
 }
 
-resource "aws_lambda_function" "queue_feeder" {
-  filename         = "${data.archive_file.batch_processing_feeder_zip.output_path}"
-  source_code_hash = "${base64sha256(file("${data.archive_file.batch_processing_feeder_zip.output_path}"))}"
-  function_name    = "queue-feeder"
-  role             = "${aws_iam_role.batch_processing_feeder_role.arn}"
+resource "aws_lambda_function" "queue_worker" {
+  filename         = "${data.archive_file.batch_processing_worker_zip.output_path}"
+  source_code_hash = "${base64sha256(file("${data.archive_file.batch_processing_worker_zip.output_path}"))}"
+  function_name    = "queue-worker"
+  role             = "${aws_iam_role.batch_processing_worker_role.arn}"
   handler          = "index.handler"
-  runtime          = "nodejs6.10"
+  runtime          = "nodejs8.10"
   timeout          = 60
   publish          = true
   vpc_config       = {
-    subnet_ids = ["${data.aws_subnet_ids.private_subnets.ids}"]
+    subnet_ids = ["${aws_subnet.private1.id}"]
     security_group_ids = ["${aws_security_group.allow_anything.id}"]
   }
   environment {
@@ -296,9 +291,15 @@ resource "aws_lambda_function" "queue_feeder" {
       SQS_QUEUE_URL = "${aws_sqs_queue.batch_processing_queue.id}"
       REDIS_HOST = "${aws_elasticache_cluster.redis.cache_nodes.0.address}"
       REDIS_PORT = "${aws_elasticache_cluster.redis.port}"
-      MY_FUNCTION_NAME = "queue-feeder"
       S3_INCOMING_BUCKET = "${aws_s3_bucket.batch_processing_incoming.id}"
       S3_OUTGOING_BUCKET = "${aws_s3_bucket.batch_processing_outgoing.id}"
     }
   }
+}
+
+resource "aws_lambda_event_source_mapping" "event_source_mapping" {
+  batch_size        = 10
+  event_source_arn  = "${aws_sqs_queue.batch_processing_queue.arn}"
+  enabled           = true
+  function_name     = "${aws_lambda_function.queue_worker.arn}"
 }

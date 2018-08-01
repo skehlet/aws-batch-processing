@@ -2,7 +2,7 @@
   "name": "aws-batch-processing",
   "version": "1.0.0",
   "description": "Just a test to see if this design works.",
-  "main": "launch-feeder.js",
+  "main": "launch-worker.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
