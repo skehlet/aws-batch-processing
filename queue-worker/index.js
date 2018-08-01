@@ -24,18 +24,14 @@ const S3_OUTGOING_BUCKET = process.env.S3_OUTGOING_BUCKET;
 const REDIS_CONNECT_TIMEOUT = 10 * 1000; // fail if we can't connect within 10sec, helps diagnose VPC problems
 const REDIS_MAX_CONNECT_ATTEMPTS = 1; // helps diagnose VPC problems
 
-const S3_RECURSE_FLAG = 'keep-feeding';
-
 const AWS = require('aws-sdk');
 AWS.config.update({
     region: AWS_REGION_NAME
 });
-const SQS = new AWS.SQS({apiVersion: '2012-11-05'});
 let s3 = new AWS.S3({
     signatureVersion: 'v4',
     apiVersion: '2006-03-01'
 });
-const Lambda = new AWS.Lambda({apiVersion: '2015-03-31'});
 const redis = require('redis');
 const Promise = require('bluebird');
 Promise.promisifyAll(redis.RedisClient.prototype);
